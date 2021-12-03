@@ -21,3 +21,6 @@ To be able to run this code, the following Python 3 packages must be installed:
  - `torch`
  - `transformers`
  - `gensim`
+
+## Contributors
+The people who contributed to this repository are [IsaApalliusDeVos](https://github.com/IsaApalliusDeVos), [GhislaineLex](https://github.com/GhislaineLex), [AdrianaDuarteCorreia](https://github.com/AdrianaDuarteCorreia) and [maradf](https://github.com/maradf). 

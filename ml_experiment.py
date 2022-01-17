@@ -1,0 +1,183 @@
+import math
+import os
+import copy
+import csv
+
+import re
+import scipy
+import time
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
+
+from collections import defaultdict
+from sklearn import preprocessing
+from sklearn.metrics import mean_squared_error
+from sklearn.model_selection import KFold
+
+import torch
+import torch.nn as nn
+from torch.utils.data.sampler import SubsetRandomSampler
+
+from transformers import BertModel, BertForMaskedLM, BertTokenizer
+from transformers import GPT2LMHeadModel, GPT2Tokenizer
+import gensim
+
+#I suggest the ML algoerithm to be K-fold, as it is simple-ish, familiar and the original code also already uses it.
+
+############-------------------------------Remove before submitting
+# I took those from the conde given - those use pearson and speaman measures. Those are the ones that we need to change. 
+############-------------------------------
+
+# ## Split the data up into k folds and train k models on that data
+def train_k(cat, modelName, n_epochs, pearson_model, spearman_model, path):
+    # Print current category and setup necessary variables
+    print("Current category is " + cat)
+    dataset, train_loader, test_loader = create_dataset(cat)
+    tot_cor_p = []
+    tot_cor_s = []
+
+    # For every fold, run def run_epochs
+    # return correlations for each fold and plot loss
+    losses = []
+    pearsons = []
+    spearmans = []
+    for i in range(len(train_loader)):
+        model_bool = True
+        while model_bool is True:
+            start = time.time()
+            model_bi, criterion, optimizer = model_setup(dataset)
+            model_bi, total_train_losses, model_bool, total_val_losses, epoch_cutoff, lowest_loss_fold = run_epochs(model_bi, criterion, optimizer, n_epochs, train_loader[i], test_loader[i])
+        end = time.time()
+        dur = end - start
+        pearson_model, spearman_model, pearson, spearman = get_new_correlations(model_bi, test_loader[i], cat, pearson_model, spearman_model, epoch_cutoff, lowest_loss_fold, dur)
+        plot_losses(cat, modelName, total_train_losses, total_val_losses, i, path)
+        losses.append(lowest_loss_fold)
+        pearsons.append(pearson[0])
+        spearmans.append(spearman[0])
+    loss = np.mean(losses)
+    pearson = np.mean(pearsons)
+    spearman = np.mean(spearmans)
+    return pearson_model, spearman_model, loss, pearson, spearman
+
+
+
+
+
+# ## Train the model for the defined number of epochs
+def run_epochs(model_bi, criterion, optimizer, n_epochs, train_loader, val_loader):
+    ##Bilinear
+
+    # Initialize variables
+    total_train_losses = []
+    total_val_losses = []
+    bad_model = False
+    lowest_epoch_val_loss = 0
+    last_epoch_train_loss = []
+    last_epoch_train_mse = []
+    increasing_loss_counter = 0
+
+    # Run n_epochs times
+    for i in range(n_epochs):
+
+        # Train model on X1 and X2 from trainloader
+        epoch_train_losses = []
+        epoch_train_mse =[]
+
+        for X1_batch, X2_batch, y_batch in train_loader:
+
+            model_bi.train()
+            optimizer.zero_grad()
+
+            y_pred = model_bi(X1_batch, X2_batch)
+
+            # In case of a nan, return
+            if math.isnan(y_pred.detach().numpy()):
+                bad_model = True
+                return model_bi, total_train_losses, bad_model, total_val_losses, i+1, epoch_train_loss
+
+            loss = criterion(y_pred, y_batch)
+
+            loss.backward()
+            optimizer.step()
+
+            epoch_train_losses.append(loss.item())
+            epoch_train_mse.append(mean_squared_error(y_batch.detach().numpy(), y_pred.detach().numpy()))
+
+        # Evaluate model on validation set
+        epoch_val_losses = []
+        epoch_val_mse =[]
+
+        for X1_batch, X2_batch, y_batch in val_loader:
+            model_bi.eval()
+            y_pred = model_bi(X1_batch,X2_batch)
+            loss = criterion(y_pred, y_batch)
+
+            loss.backward()
+
+            epoch_val_losses.append(loss.item())
+            epoch_val_mse.append(mean_squared_error(y_batch.detach().numpy(), y_pred.detach().numpy()))
+
+        # Calculate losses and mse
+        epoch_train_loss = np.mean(epoch_train_losses)
+        epoch_train_mse = sum(epoch_train_mse)/len(epoch_train_mse)
+        epoch_val_loss = np.mean(epoch_val_losses)
+        epoch_val_mse = sum(epoch_val_mse)/len(epoch_val_mse)
+
+        # check if the validation loss is increasing
+        # if it increases 10 times in a row, stop the training to prevent the model from overfitting
+        if epoch_val_loss < 0.1 and lowest_epoch_val_loss <= epoch_val_loss:
+            # loss is increasing or the same
+            if increasing_loss_counter == 0:
+                best_model_bi = copy.deepcopy(model_bi)
+            increasing_loss_counter += 1
+        elif epoch_val_loss < 0.1 and lowest_epoch_val_loss > epoch_val_loss:
+            # loss is decreasing
+            increasing_loss_counter = 0
+            lowest_epoch_val_loss = epoch_val_loss
+        else:
+            lowest_epoch_val_loss = epoch_val_loss
+
+        if increasing_loss_counter == 10:
+            print(f'Epoch: {i-9}, loss: {epoch_train_loss:.3f}, mse: {epoch_train_mse:.3f}')
+            return best_model_bi, total_train_losses, bad_model, total_val_losses, i-9, epoch_train_loss
+
+        # Print the loss every 100th epoch
+        if n_epochs != 1 and i % 100 == 0 or i == 999:
+            print(f'Epoch: {i+1}, loss: {epoch_train_loss:.3f}, mse: {epoch_train_mse:.3f}')
+
+        total_train_losses.append((sum(epoch_train_losses)/len(epoch_train_losses)))
+        total_val_losses.append((sum(epoch_val_losses)/len(epoch_val_losses)))
+
+    return model_bi, total_train_losses, bad_model, total_val_losses, i+1, epoch_train_loss
+
+
+# ## Initialise the model
+def model_setup(dataset):
+    ##Bilinear
+
+    # setting up the model
+
+    # find the number of input features
+    n_features = dataset.X1.shape[1] # Length of vector
+    n_c = dataset.X1.shape[0] # Number of wordpairs
+
+    # how many hidden units in the network - we'll choose something between the size of the input and output layer
+    # see https://stats.stackexchange.com/questions/181/how-to-choose-the-number-of-hidden-layers-and-nodes-in-a-feedforward-neural-netw
+    # for discussion of "best practices"
+    hidden_size = 400
+
+    # how many classes in the classification task
+    n_classes = n_features
+    # for BCELoss you need 1 output unit
+    # generally, to find the number of unique labels, use len(set(dataset.y.unique()))
+
+    # instantiate the model
+    model_bi = Symmetric_BilinearNN(n_features, n_classes)
+    # model = model.to('cuda') #if you have it
+
+    # set up the loss and the optimizer
+    criterion = torch.nn.MSELoss(reduction="mean")
+    optimizer = torch.optim.Adam(model_bi.parameters(), lr=learning_rate)
+    return model_bi, criterion, optimizer

@@ -274,9 +274,9 @@ def plot_losses(cat_name, model_name, train_losses, val_losses, i, path):
     return plt
 
 
-# ## calculate the pearson and spearman correlations between the word embeddings' similarity scores, using the model's
+# ## calculate the Mahalanobis and frobenius correlations between the word embeddings' similarity scores, using the model's
 #    found metric, and the human judgement similarity scores
-def get_new_correlations(model_bi, test_loader, cat_name, pearson_data, spearman_data, epoch_cutoff, lowest_loss,
+def get_new_correlations(model_bi, test_loader, cat_name, mahalanobis_data, frobenius_data, epoch_cutoff, lowest_loss,
                          duration, big_dataset=False):
     accuracies = []
     ypred = []
@@ -292,31 +292,32 @@ def get_new_correlations(model_bi, test_loader, cat_name, pearson_data, spearman
         accuracy = mean_squared_error(y_pred.detach().numpy(), y_batch.detach().numpy())
         accuracies.append(accuracy)
 
-    # Get Pearson and Spearman correlations
+    # Get mahalanobis and frobenius correlations
     ypred = np.concatenate(ypred).ravel()
     ybatch = np.concatenate(ybatch).ravel()
-    pearson = scipy.stats.pearsonr(ybatch, ypred)
-    spearman = scipy.stats.spearmanr(ybatch, ypred, axis=None)
+    mahalanobis  = 0 ############ ADD HERE Put the mahalanobis mesuere here. It should be a function the gets (ybatch, ypred) as arguemnts, where ybatch is what the model guesses and ypred is what we have!
+    frobenius = 0 #########  ADD HERE Put the frobenius norm here. It should be a function the gets (ybatch, ypred) as arguemnts, where ybatch is what the model guesses and ypred is what we have!
+                    ########## For both measures we want to eventually compare item-wise. So, I expect (but I might be wrong) that you will need a funcntion that takes the two y-lists and returns a list of their comparison
 
     # Return calculations in necessary format
     if big_dataset:
-        return pearson, spearman
+        return mahalanobis, frobenius
     else:
         print("Model correlations are: ")
-        print("Pearson", pearson)
-        print("Spearman", spearman)
-        p = pearson
-        s = spearman
-        pearson = [cat_name] + list(pearson) + [epoch_cutoff] + [lowest_loss] + [duration]
-        spearman = [cat_name] + list(spearman) + [epoch_cutoff] + [lowest_loss] + [duration]
-        pearson_data.append(pearson)
-        spearman_data.append(spearman)
-        return pearson_data, spearman_data, p, s
+        print("Mahalanobis", mahalanobis)
+        print("Frobenius", frobenius)
+        m = mahalanobis
+        f = frobenius
+        mahalanobis = [cat_name] + list(mahalanobis) + [epoch_cutoff] + [lowest_loss] + [duration]
+        frobenius = [cat_name] + list(frobenius) + [epoch_cutoff] + [lowest_loss] + [duration]
+        mahalanobis_data.append(mahalanobis)
+        frobenius_data.append(frobenius)
+        return mahalanobis_data, frobenius_data, m, f
 
 
-# ## calculate the pearson and spearman correlations between the word embeddings' similarity scores, using the baseline
+# ## calculate the mahalanobis and frobenius correlations between the word embeddings' similarity scores, using the baseline
 #    cosine similarity metric, and the human judgement similarity scores
-def get_baseline_correlations(test_loader, cat_name, pearson_data, spearman_data):
+def get_baseline_correlations(test_loader, cat_name, mahalanobis_data, frobenius_data):
     ypred = []
     ybatch = []
     # predict the cosine similarity for each datapoint in the test set
@@ -328,22 +329,23 @@ def get_baseline_correlations(test_loader, cat_name, pearson_data, spearman_data
             ypred.append(y_pred.detach().numpy())
             ybatch.append(y_batch.detach().numpy())
 
-    # Get Pearson and Spearman correlations
+    # Get mahalanobis and frobenius correlations
+    ########### That might be extremely inefficient, there must be a better way to do it. Will look at it tomorrow
     ypred = np.concatenate(ypred).ravel()
     ybatch = np.concatenate(ybatch).ravel()
-    pearson = scipy.stats.pearsonr(ybatch, ypred)
-    spearman = scipy.stats.spearmanr(ybatch, ypred, axis=None)
+    mahalanobis = 0  ################ ADD HERE The mahalanobis measure as explained above
+    frobenius = 0 ############### ADD HERE The frobenuis norm as explained above
 
     print("Baseline correlations are: ")
-    print("Pearson", pearson)
-    print("Spearman", spearman)
+    print("Mahalanobis", mahalanobis)
+    print("Frobenius", frobenius)
 
     # save and return the correlations
-    pearson = [cat_name] + list(pearson)
-    spearman = [cat_name] + list(spearman)
-    pearson_data.append(pearson)
-    spearman_data.append(spearman)
-    return pearson_data, spearman_data
+    mahalanobis = [cat_name] + list(mahalanobis)
+    frobenius = [cat_name] + list(frobenius)
+    mahalanobis_data.append(mahalanobis)
+    frobenius_data.append(frobenius)
+    return mahalanobis_data, frobenius_data
 
 
 # ## General Word Embedding Functions
@@ -801,31 +803,31 @@ def prepare_data(words, representations, human_judgements, model_name, context_o
 
 
 # ## Save the model and baseline results to four separate csv files
-def save_data(path, cat, model_name, pearson_model, spearman_model, pearson_base, spearman_base, lr, fold):
+def save_data(path, cat, model_name, mahalanobis_model, frobenius_model, mahalanobis_base, frobenius_base, lr, fold):
     # Save the model and baseline results to four separate csv files
 
-    # Model results with pearson correlations
-    with open(os.path.join(path, "pearson_MODEL_" + model_name + "_" + cat + "_" + str(lr) + "_" + str(fold) + ".csv"),
+    # Model results with mahalanobis correlations
+    with open(os.path.join(path, "mahalanobis_MODEL_" + model_name + "_" + cat + "_" + str(lr) + "_" + str(fold) + ".csv"),
               "w", newline='') as f:
         writer = csv.writer(f)
-        writer.writerows(pearson_model)
+        writer.writerows(mahalanobis_model)
 
-    # Model results with spearman correlations
-    with open(os.path.join(path, "spearman_MODEL_" + model_name + "_" + cat + "_" + str(lr) + "_" + str(fold) + ".csv"),
+    # Model results with frobenius correlations
+    with open(os.path.join(path, "frobenius_MODEL_" + model_name + "_" + cat + "_" + str(lr) + "_" + str(fold) + ".csv"),
               "w", newline='') as f:
         writer = csv.writer(f)
-        writer.writerows(spearman_model)
+        writer.writerows(frobenius_model)
 
-    # Baseline results with pearson correlations
-    with open(os.path.join(path, "pearson_BASE_" + model_name + "_" + cat + "_" + str(lr) + "_" + str(fold) + ".csv"),
+    # Baseline results with mahalanobis correlations
+    with open(os.path.join(path, "mahalanobis_BASE_" + model_name + "_" + cat + "_" + str(lr) + "_" + str(fold) + ".csv"),
               "w", newline='') as f:
         writer = csv.writer(f)
-        writer.writerows(pearson_base)
-    # Baseline results with spearman correlations
-    with open(os.path.join(path, "spearman_BASE_" + model_name + "_" + cat + "_" + str(lr) + "_" + str(fold) + ".csv"),
+        writer.writerows(mahalanobis_base)
+    # Baseline results with frobenius correlations
+    with open(os.path.join(path, "frobenius_BASE_" + model_name + "_" + cat + "_" + str(lr) + "_" + str(fold) + ".csv"),
               "w", newline='') as f:
         writer = csv.writer(f)
-        writer.writerows(spearman_base)
+        writer.writerows(frobenius_base)
 
 
 # ## Create a directory to save the data in
@@ -949,13 +951,13 @@ def train_big(categories, n_epochs):
     return tot_train, tot_val, models, used_epochs, data
 
 
-# ## Calculate the pearson and spearman correlations between the word embeddings' similarity scores, using the model's
+# ## Calculate the mahalanobis and frobenius correlations between the word embeddings' similarity scores, using the model's
 #    found metric, and the human judgement similarity scores
 #    The whole dataset correlations are calculated by computing the correlations for each of the separate categories
 #    and averaging over the categories for each of the folds
 def get_correlations_big(models, data, categories, used_epochs, num_folds):
-    pearsons = []
-    spearmans = []
+    mahalanobiss = []
+    frobeniuss = []
     p = []
     s = []
 
@@ -966,65 +968,65 @@ def get_correlations_big(models, data, categories, used_epochs, num_folds):
         model = models[i][-1]
 
         # Set all lists to empty
-        pearson_model = []
-        spearman_model = []
-        pearson_cat_cor = []
-        pearson_cat_p = []
-        spearman_cat_cor = []
-        spearman_cat_p = []
+        mahalanobis_model = []
+        frobenius_model = []
+        mahalanobis_cat_cor = []
+        mahalanobis_cat_p = []
+        frobenius_cat_cor = []
+        frobenius_cat_p = []
 
-        # Calculate spearman and pearson value for each category
+        # Calculate frobenius and mahalanobis value for each category
         for cat in categories:
-            pearson_cat, spearman_cat = get_new_correlations(model, data[cat][2][i], cat, [], [], used_epoch, 0, 0, big_dataset=True)
+            mahalanobis_cat, frobenius_cat = get_new_correlations(model, data[cat][2][i], cat, [], [], used_epoch, 0, 0, big_dataset=True)
 
             # Save the correlation value and the p-value separately
-            list_pearson = list(pearson_cat)
-            list_spearman = list(spearman_cat)
-            pearson_cat_cor.append(list_pearson[0])
-            pearson_cat_p.append(list_pearson[1])
-            spearman_cat_cor.append(list_spearman[0])
-            spearman_cat_p.append(list_spearman[1])
+            list_mahalanobis = list(mahalanobis_cat)
+            list_frobenius = list(frobenius_cat)
+            mahalanobis_cat_cor.append(list_mahalanobis[0])
+            mahalanobis_cat_p.append(list_mahalanobis[1])
+            frobenius_cat_cor.append(list_frobenius[0])
+            frobenius_cat_p.append(list_frobenius[1])
 
             # Concat category name, correlation and p values and number of epochs to list
-            pearson = [cat] + list_pearson + [used_epoch]
-            spearman = [cat] + list_spearman + [used_epoch]
+            mahalanobis = [cat] + list_mahalanobis + [used_epoch]
+            frobenius = [cat] + list_frobenius + [used_epoch]
 
-            pearson_model.append(pearson)
-            spearman_model.append(spearman)
+            mahalanobis_model.append(mahalanobis)
+            frobenius_model.append(frobenius)
 
         # Calculate average correlation value and pvalues and concat to list
-        pearson_model.append(["Full dataset"] + [np.mean(pearson_cat_cor), np.mean(pearson_cat_p), used_epoch])
-        spearman_model.append(["Full dataset"] + [np.mean(spearman_cat_cor), np.mean(spearman_cat_p), used_epoch])
+        mahalanobis_model.append(["Full dataset"] + [np.mean(mahalanobis_cat_cor), np.mean(mahalanobis_cat_p), used_epoch])
+        frobenius_model.append(["Full dataset"] + [np.mean(frobenius_cat_cor), np.mean(frobenius_cat_p), used_epoch])
 
-        p.append(np.mean(pearson_cat_cor))
-        s.append(np.mean(spearman_cat_cor))
+        p.append(np.mean(mahalanobis_cat_cor))
+        s.append(np.mean(frobenius_cat_cor))
 
         # Add all values to big list
-        pearsons.append(pearson_model)
-        spearmans.append(spearman_model)
+        mahalanobiss.append(mahalanobis_model)
+        frobeniuss.append(frobenius_model)
 
-    return pearsons, spearmans, p, s
+    return mahalanobiss, frobeniuss, p, s
 
 
-# ## Calculate the pearson and spearman correlations between the word embeddings' similarity scores, using the baseline
+# ## Calculate the mahalanobis and frobenius correlations between the word embeddings' similarity scores, using the baseline
 #    cosine similarity metric, and the human judgement similarity scores
 #    The whole dataset correlations are calculated by computing the correlations for each of the separate categories
 #    and averaging over the categories for each of the folds
 def get_baseline_big(data, categories, num_folds):
-    pearsons = []
-    spearmans = []
+    mahalanobiss = []
+    frobeniuss = []
 
     # Run through all the different folds
     for i in range(num_folds):
         # Set all lists to empty
-        pearson_model = []
-        spearman_model = []
-        pearson_cat_cor = []
-        pearson_cat_p = []
-        spearman_cat_cor = []
-        spearman_cat_p = []
+        mahalanobis_model = []
+        frobenius_model = []
+        mahalanobis_cat_cor = []
+        mahalanobis_cat_p = []
+        frobenius_cat_cor = []
+        frobenius_cat_p = []
 
-        # Calculate spearman and pearson value for each category
+        # Calculate frobenius and mahalanobis value for each category
         for cat in categories:
             ypred=[]
             ybatch=[]
@@ -1041,29 +1043,29 @@ def get_baseline_big(data, categories, num_folds):
             ypred = np.concatenate(ypred).ravel()
             ybatch = np.concatenate(ybatch).ravel()
 
-            list_pearson = list(scipy.stats.pearsonr(ybatch,ypred))
-            list_spearman = list(scipy.stats.spearmanr(ybatch,ypred, axis=None))
+            list_mahalanobis = list(scipy.stats.mahalanobisr(ybatch,ypred))
+            list_frobenius = list(scipy.stats.frobeniusr(ybatch,ypred, axis=None))
 
             # Save the correlation value and the p-value separately
-            pearson_cat_cor.append(list_pearson[0])
-            pearson_cat_p.append(list_pearson[1])
-            spearman_cat_cor.append(list_spearman[0])
-            spearman_cat_p.append(list_spearman[1])
+            mahalanobis_cat_cor.append(list_mahalanobis[0])
+            mahalanobis_cat_p.append(list_mahalanobis[1])
+            frobenius_cat_cor.append(list_frobenius[0])
+            frobenius_cat_p.append(list_frobenius[1])
 
             # Concat category and similarity and pvalues
-            pearson = [cat] + list_pearson
-            spearman = [cat] + list_spearman
+            mahalanobis = [cat] + list_mahalanobis
+            frobenius = [cat] + list_frobenius
 
-            pearson_model.append(pearson)
-            spearman_model.append(spearman)
+            mahalanobis_model.append(mahalanobis)
+            frobenius_model.append(frobenius)
 
         # Calculate average correlation value and pvalues and concat to list
-        pearson_model.append(["Full dataset"] + [np.mean(pearson_cat_cor), np.mean(pearson_cat_p)])
-        spearman_model.append(["Full dataset"] + [np.mean(spearman_cat_cor), np.mean(spearman_cat_p)])
-        pearsons.append(pearson_model)
-        spearmans.append(spearman_model)
+        mahalanobis_model.append(["Full dataset"] + [np.mean(mahalanobis_cat_cor), np.mean(mahalanobis_cat_p)])
+        frobenius_model.append(["Full dataset"] + [np.mean(frobenius_cat_cor), np.mean(frobenius_cat_p)])
+        mahalanobiss.append(mahalanobis_model)
+        frobeniuss.append(frobenius_model)
 
-    return pearsons, spearmans
+    return mahalanobiss, frobeniuss
 
 
 """
@@ -1132,17 +1134,17 @@ for model_name, context_on in all_models:
     for num_folds in [5, 6, 7]:
         for learning_rate in [0.00001, 0.000001, 0.0000001]:
             print("\nlr =", learning_rate, "and num_folds =", num_folds)
-            # initialise the pearson and spearman lists for each model
+            # initialise the mahalanobis and frobenius lists for each model
             labels_model = ["category", "correlation", "p-value", "epochs", "lowest train loss", "duration"]
             labels_base = ["category", "correlation", "p-value"]
-            pearson_model = []
-            spearman_model = []
-            pearson_model.append(labels_model)
-            spearman_model.append(labels_model)
-            pearson_base = []
-            spearman_base = []
-            pearson_base.append(labels_base)
-            spearman_base.append(labels_base)
+            mahalanobis_model = []
+            frobenius_model = []
+            mahalanobis_model.append(labels_model)
+            frobenius_model.append(labels_model)
+            mahalanobis_base = []
+            frobenius_base = []
+            mahalanobis_base.append(labels_base)
+            frobenius_base.append(labels_base)
 
             # define the maximal number of epochs for training
             num_epochs = 1000
@@ -1166,38 +1168,38 @@ for model_name, context_on in all_models:
 
             # calculate the model and baseline correlations and save them
             cat = "Complete_data"
-            pearson_model, spearman_model, pearsons, spearmans = get_correlations_big(models, datas, categories, used_epochs, num_folds)
-            pearson_base, spearman_base = get_baseline_big(datas, categories, num_folds)
-            save_data(path, cat, model_name, pearson_model, spearman_model, pearson_base, spearman_base, learning_rate,
+            mahalanobis_model, frobenius_model, mahalanobiss, frobeniuss = get_correlations_big(models, datas, categories, used_epochs, num_folds)
+            mahalanobis_base, frobenius_base = get_baseline_big(datas, categories, num_folds)
+            save_data(path, cat, model_name, mahalanobis_model, frobenius_model, mahalanobis_base, frobenius_base, learning_rate,
                       num_folds)
 
             # save hyperparameter results in the dictionaries
             model_cat = model_name + '-' + ctxt_str + ' ' + cat
             lr_fold = str(learning_rate) + ' ' + str(num_folds)
-            corr_p_dict[model_cat][lr_fold] = np.mean(pearsons)
-            corr_s_dict[model_cat][lr_fold] = np.mean(spearmans)
+            corr_p_dict[model_cat][lr_fold] = np.mean(mahalanobiss)
+            corr_s_dict[model_cat][lr_fold] = np.mean(frobeniuss)
 
             # test the model on the wordsim and simlex datasets (only if embedding type is not contextualised
             if context_on is False:
                 # Saves results for the complete dataset run with wordsim353 as test set
                 cat = "wordsim353"
                 data[cat] = create_dataset_extra(cat)
-                pearson_model, spearman_model, p, s = get_correlations_big(models, data, [cat], used_epochs, num_folds)
-                pearson_base, spearman_base = get_baseline_big(data, [cat], num_folds)
+                mahalanobis_model, frobenius_model, p, s = get_correlations_big(models, data, [cat], used_epochs, num_folds)
+                mahalanobis_base, frobenius_base = get_baseline_big(data, [cat], num_folds)
                 cat = "wordsim353_Complete_Data"
-                save_data(path, cat, model_name, pearson_model, spearman_model, pearson_base, spearman_base, learning_rate, num_folds)
+                save_data(path, cat, model_name, mahalanobis_model, frobenius_model, mahalanobis_base, frobenius_base, learning_rate, num_folds)
 
                 # Saves results for the complete dataset run with simlex999 as test set
                 cat = "simlex999"
                 data[cat] = create_dataset_extra(cat)
-                pearson_model, spearman_model, p, s = get_correlations_big(models, data, [cat], used_epochs, num_folds)
-                pearson_base, spearman_base = get_baseline_big(data, [cat], num_folds)
+                mahalanobis_model, frobenius_model, p, s = get_correlations_big(models, data, [cat], used_epochs, num_folds)
+                mahalanobis_base, frobenius_base = get_baseline_big(data, [cat], num_folds)
                 cat = "simlex999_Complete_Data"
-                save_data(path, cat, model_name, pearson_model, spearman_model, pearson_base, spearman_base, learning_rate, num_folds)
+                save_data(path, cat, model_name, mahalanobis_model, frobenius_model, mahalanobis_base, frobenius_base, learning_rate, num_folds)
 
 
-    labels_best = ["model name", "category", "highest pearson lr",
-                   "highest pearson folds", "highest spearman lr", "highest spearman folds"]
+    labels_best = ["model name", "category", "highest mahalanobis lr",
+                   "highest mahalanobis folds", "highest frobenius lr", "highest frobenius folds"]
     best_params = []
     best_params.append(labels_best)
 

@@ -31,9 +31,9 @@ import gensim
 ############-------------------------------
 
 
-# ## calculate the pearson and spearman correlations between the word embeddings' similarity scores, using the model's
+# ## calculate the Mahalanobis and frobenius correlations between the word embeddings' similarity scores, using the model's
 #    found metric, and the human judgement similarity scores
-def get_new_correlations(model_bi, test_loader, cat_name, pearson_data, spearman_data, epoch_cutoff, lowest_loss,
+def get_new_correlations(model_bi, test_loader, cat_name, mahalanobis_data, frobenius_data, epoch_cutoff, lowest_loss,
                          duration, big_dataset=False):
     accuracies = []
     ypred = []
@@ -49,32 +49,66 @@ def get_new_correlations(model_bi, test_loader, cat_name, pearson_data, spearman
         accuracy = mean_squared_error(y_pred.detach().numpy(), y_batch.detach().numpy())
         accuracies.append(accuracy)
 
-    # Get Pearson and Spearman correlations
+    # Get mahalanobis and frobenius correlations
     ypred = np.concatenate(ypred).ravel()
     ybatch = np.concatenate(ybatch).ravel()
-    pearson = scipy.stats.pearsonr(ybatch, ypred)
-    spearman = scipy.stats.spearmanr(ybatch, ypred, axis=None)
+    mahalanobis  = 0 ############ ADD HERE Put the mahalanobis mesuere here. It should be a function the gets (ybatch, ypred) as arguemnts, where ybatch is what the model guesses and ypred is what we have!
+    frobenius = 0 #########  ADD HERE Put the frobenius norm here. It should be a function the gets (ybatch, ypred) as arguemnts, where ybatch is what the model guesses and ypred is what we have!
+                    ########## For both measures we want to eventually compare item-wise. So, I expect (but I might be wrong) that you will need a funcntion that takes the two y-lists and returns a list of their comparison
 
     # Return calculations in necessary format
     if big_dataset:
-        return pearson, spearman
+        return mahalanobis, frobenius
     else:
         print("Model correlations are: ")
-        print("Pearson", pearson)
-        print("Spearman", spearman)
-        p = pearson
-        s = spearman
-        pearson = [cat_name] + list(pearson) + [epoch_cutoff] + [lowest_loss] + [duration]
-        spearman = [cat_name] + list(spearman) + [epoch_cutoff] + [lowest_loss] + [duration]
-        pearson_data.append(pearson)
-        spearman_data.append(spearman)
-        return pearson_data, spearman_data, p, s
+        print("Mahalanobis", mahalanobis)
+        print("Frobenius", frobenius)
+        m = mahalanobis
+        f = frobenius
+        mahalanobis = [cat_name] + list(mahalanobis) + [epoch_cutoff] + [lowest_loss] + [duration]
+        frobenius = [cat_name] + list(frobenius) + [epoch_cutoff] + [lowest_loss] + [duration]
+        mahalanobis_data.append(mahalanobis)
+        frobenius_data.append(frobenius)
+        return mahalanobis_data, frobenius_data, m, f
 
+
+
+# ## calculate the mahalanobis and frobenius correlations between the word embeddings' similarity scores, using the baseline
+#    cosine similarity metric, and the human judgement similarity scores
+def get_baseline_correlations(test_loader, cat_name, mahalanobis_data, frobenius_data):
+    ypred = []
+    ybatch = []
+    # predict the cosine similarity for each datapoint in the test set
+    for fold in test_loader:
+        for X1_batch, X2_batch, y_batch in fold:
+            y_pred = torch.mm(X1_batch, torch.transpose(X2_batch, 0, 1)) / (
+                        torch.sqrt(torch.mm(X1_batch, torch.transpose(X1_batch, 0, 1))) * torch.sqrt(
+                    torch.mm(X2_batch, torch.transpose(X2_batch, 0, 1))))
+            ypred.append(y_pred.detach().numpy())
+            ybatch.append(y_batch.detach().numpy())
+
+    # Get mahalanobis and frobenius correlations
+    ########### That might be extremely inefficient, there must be a better way to do it. Will look at it tomorrow
+    ypred = np.concatenate(ypred).ravel()
+    ybatch = np.concatenate(ybatch).ravel()
+    mahalanobis = 0  ################ ADD HERE The mahalanobis measure as explained above
+    frobenius = 0 ############### ADD HERE The frobenuis norm as explained above
+
+    print("Baseline correlations are: ")
+    print("Mahalanobis", mahalanobis)
+    print("Frobenius", frobenius)
+
+    # save and return the correlations
+    mahalanobis = [cat_name] + list(mahalanobis)
+    frobenius = [cat_name] + list(frobenius)
+    mahalanobis_data.append(mahalanobis)
+    frobenius_data.append(frobenius)
+    return mahalanobis_data, frobenius_data
 
 
 
 # ## Split the data up into k folds and train k models on that data
-def train_k(cat, modelName, n_epochs, pearson_model, spearman_model, path):
+def train_k(cat, modelName, n_epochs, mahalanobis_model, frobenius_model, path):
     # Print current category and setup necessary variables
     print("Current category is " + cat)
     dataset, train_loader, test_loader = create_dataset(cat)
@@ -84,8 +118,8 @@ def train_k(cat, modelName, n_epochs, pearson_model, spearman_model, path):
     # For every fold, run def run_epochs
     # return correlations for each fold and plot loss
     losses = []
-    pearsons = []
-    spearmans = []
+    mahalanobiss = []
+    frobeniuss = []
     for i in range(len(train_loader)):
         model_bool = True
         while model_bool is True:
@@ -94,15 +128,15 @@ def train_k(cat, modelName, n_epochs, pearson_model, spearman_model, path):
             model_bi, total_train_losses, model_bool, total_val_losses, epoch_cutoff, lowest_loss_fold = run_epochs(model_bi, criterion, optimizer, n_epochs, train_loader[i], test_loader[i])
         end = time.time()
         dur = end - start
-        pearson_model, spearman_model, pearson, spearman = get_new_correlations(model_bi, test_loader[i], cat, pearson_model, spearman_model, epoch_cutoff, lowest_loss_fold, dur)
+        mahalanobis_model, frobenius_model, mahalanobis, frobenius = get_new_correlations(model_bi, test_loader[i], cat, mahalanobis_model, frobenius_model, epoch_cutoff, lowest_loss_fold, dur)
         plot_losses(cat, modelName, total_train_losses, total_val_losses, i, path)
         losses.append(lowest_loss_fold)
-        pearsons.append(pearson[0])
-        spearmans.append(spearman[0])
+        mahalanobiss.append(mahalanobis[0])
+        frobeniuss.append(frobenius[0])
     loss = np.mean(losses)
-    pearson = np.mean(pearsons)
-    spearman = np.mean(spearmans)
-    return pearson_model, spearman_model, loss, pearson, spearman
+    mahalanobis = np.mean(mahalanobiss)
+    frobenius = np.mean(frobeniuss)
+    return mahalanobis_model, frobenius_model, loss, mahalanobis, frobenius
 
 
 

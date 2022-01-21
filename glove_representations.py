@@ -4,7 +4,11 @@ import torch
 import numpy as np
 
 def glove_model():
-    # load the pretrained GloVe model (this may take some time)
+    """Load the pretrained GloVe embedding vectors. Path is hardcoded.
+    Returns a defaultdict with as keys the word categories, and as values
+    lists of tuples which contain a word string as the first element and
+    the corresponding embedding (dimension (1, 200)) as the second element.
+    """
     gModel = {}
     with open("glove.6B.200d.txt", 'r', encoding='utf-8') as f:
         for line in f:

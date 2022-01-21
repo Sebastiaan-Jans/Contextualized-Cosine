@@ -7,7 +7,7 @@ def glove_model():
     """Load the pretrained GloVe embedding vectors. Path is hardcoded.
     Returns a defaultdict with as keys the word categories, and as values
     lists of tuples which contain a word string as the first element and
-    the corresponding embedding (dimension (1, 200)) as the second element.
+    the corresponding embedding as the second element.
     """
     gModel = {}
     with open("glove.6B.200d.txt", 'r', encoding='utf-8') as f:
@@ -37,6 +37,8 @@ def glove_model():
 
 
 words = pd.read_csv('table 1 - word lists.csv')
-glove_reps = glove_model()
-#print(glove_reps)
-#print(glove_reps['Furniture'][0][1])
+
+if __name__ == "__main__":
+    glove_reps = glove_model()
+    #print(glove_reps)
+    #print(glove_reps['Furniture'][0][1])

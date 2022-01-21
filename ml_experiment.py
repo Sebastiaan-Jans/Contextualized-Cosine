@@ -27,8 +27,51 @@ import gensim
 #I suggest the ML algoerithm to be K-fold, as it is simple-ish, familiar and the original code also already uses it.
 
 ############-------------------------------Remove before submitting
-# I took those from the conde given - those use pearson and speaman measures. Those are the ones that we need to change. 
+# I took those from the code given - those use pearson and speaman measures. Those are the ones that we need to change. 
 ############-------------------------------
+
+
+# ## calculate the pearson and spearman correlations between the word embeddings' similarity scores, using the model's
+#    found metric, and the human judgement similarity scores
+def get_new_correlations(model_bi, test_loader, cat_name, pearson_data, spearman_data, epoch_cutoff, lowest_loss,
+                         duration, big_dataset=False):
+    accuracies = []
+    ypred = []
+    ybatch = []
+
+    # Calculate accuracy
+    for X1_batch, X2_batch, y_batch in test_loader:
+        y_pred = model_bi(X1_batch, X2_batch)
+
+        ypred.append(y_pred.detach().numpy())
+        ybatch.append(y_batch.detach().numpy())
+
+        accuracy = mean_squared_error(y_pred.detach().numpy(), y_batch.detach().numpy())
+        accuracies.append(accuracy)
+
+    # Get Pearson and Spearman correlations
+    ypred = np.concatenate(ypred).ravel()
+    ybatch = np.concatenate(ybatch).ravel()
+    pearson = scipy.stats.pearsonr(ybatch, ypred)
+    spearman = scipy.stats.spearmanr(ybatch, ypred, axis=None)
+
+    # Return calculations in necessary format
+    if big_dataset:
+        return pearson, spearman
+    else:
+        print("Model correlations are: ")
+        print("Pearson", pearson)
+        print("Spearman", spearman)
+        p = pearson
+        s = spearman
+        pearson = [cat_name] + list(pearson) + [epoch_cutoff] + [lowest_loss] + [duration]
+        spearman = [cat_name] + list(spearman) + [epoch_cutoff] + [lowest_loss] + [duration]
+        pearson_data.append(pearson)
+        spearman_data.append(spearman)
+        return pearson_data, spearman_data, p, s
+
+
+
 
 # ## Split the data up into k folds and train k models on that data
 def train_k(cat, modelName, n_epochs, pearson_model, spearman_model, path):
@@ -181,3 +224,41 @@ def model_setup(dataset):
     criterion = torch.nn.MSELoss(reduction="mean")
     optimizer = torch.optim.Adam(model_bi.parameters(), lr=learning_rate)
     return model_bi, criterion, optimizer
+
+#################### Edit when we get the actual dataset    
+# ## Create the datasets by splitting the given data up into k folds of data and defining the train and test sets
+def create_dataset(cat):
+    ## Bilinear
+
+    # get dataset
+    dataset = similarity_bi(cat)
+    batch_size = 1
+
+    # Setting test size and seed
+    test_split = float(1/num_folds)
+    shuffle_dataset = True
+    random_seed = 42
+
+    # Creating data indices for training and test splits:
+    dataset_size = len(dataset)
+    indices = list(range(dataset_size))
+    split = int(np.floor(test_split * dataset_size))
+
+    # Shuffling the dataset if need be
+    if shuffle_dataset:
+        np.random.seed(random_seed)
+        np.random.shuffle(indices)
+
+    # set up k-fold
+    kf = KFold(n_splits=num_folds, random_state = 42, shuffle = True)
+    train_tot = []
+    test_tot = []
+    for train_split, test_split in kf.split(dataset):
+        # Creating the loaders for the train and test data, as defined above
+        train_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, sampler=train_split)
+        test_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, sampler=test_split)
+        train_tot.append(train_loader)
+        test_tot.append(test_loader)
+
+    return dataset, train_tot, test_tot
+

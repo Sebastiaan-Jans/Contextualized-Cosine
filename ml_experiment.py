@@ -296,3 +296,54 @@ def create_dataset(cat):
 
     return dataset, train_tot, test_tot
 
+class similarity_bi(torch.utils.data.Dataset):
+
+    def __init__(self, cat):
+        # converting the loaded numpy data to torch tensors
+        self.X1 = torch.from_numpy(X1[cat]).float()
+        self.X2 = torch.from_numpy(X2[cat]).float()
+        self.y = torch.from_numpy(data[cat].target.to_numpy())
+
+    def __getitem__(self, index):
+        # retrieval of a datapoint by index
+        X1 = self.X1[index]
+        X2 = self.X2[index]
+        y = self.y[index].unsqueeze(-1).float()
+        return X1, X2, y
+
+    def __len__(self):
+        # helper function to check the size of the dataset
+        return len(self.y)
+
+    def __add__(self, new):
+        # helper function to add two instances of similarity_bi together
+        self.X1 = torch.cat((self.X1, new.X1), 0)
+        self.X2 = torch.cat((self.X2, new.X2), 0)
+        self.y = torch.cat((self.y, new.y), 0)
+        return self
+
+
+def cosine_sim_cat_matrices(words,path, to_plot = False):
+    '''Get the cosine similarity per category to use it as a baseline.'''
+
+    cos = torch.nn.CosineSimilarity(dim=0, eps=1e-6)
+    representations = reduced_glove_reps(words, path)
+    
+    all_adjecensy = {}
+    for category in words:
+        cat_unique = words[category].dropna().unique()
+        dim = len(cat_unique)
+        adj_matrix = np.zeros((dim, dim))
+        for ind1, val1 in enumerate(enumerate(cat_unique)):
+            for ind2, val2 in enumerate(enumerate(cat_unique)):
+                adj_matrix[ind1, ind2] = cos(representations[category][ind1][1], representations[category][ind2][1])
+        all_adjecensy[category] = adj_matrix
+
+        if(to_plot == True):
+            print(category)
+            ax = sns.heatmap(adj_matrix, linewidth=0.5, vmin=0, vmax=1)
+            plt.xticks(range(dim), words[category].dropna().unique(),rotation=-45)
+            plt.yticks(range(dim), words[category].dropna().unique(),rotation=45)
+            plt.show()
+
+    return all_adjecensy

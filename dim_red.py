@@ -1,6 +1,6 @@
 """Dimensionality reduction following the recipe of
 Raunak, Gupta and Metze (2019).
-https://github.com/vyraun/Half-
+https://github.com/vyraun/Half-Size/
 """
 
 # import glove_representations
@@ -31,10 +31,13 @@ def load_full_glove(embeddings_path):
 
     return gModel
 
-def reduce_dimension(embeddings, dim, filename):
+
+
+def reduce_dimension(embeddings, dim, filename, D=0):
     """Reduce dimensionality embeddings in the `embeddings` dict to
     `dim` dimensions. Returns a new dict containing the reduced embeddings.
     Also writes the embeddings to a text file.
+    D is a threshold parameter of the post-processing algorithm (PPA).
     Uses the reduction algorithm by Raunak et al. (2019).
     """
     X_train = []
@@ -60,7 +63,7 @@ def reduce_dimension(embeddings, dim, filename):
     # Remove projections on top components
     z = []
     for i, vector in enumerate(X_train):
-        for u in U1[0:7]:
+        for u in U1[0:D]:
             vector = vector - np.dot(u.transpose(), vector) * u
         z.append(vector)
     
@@ -89,7 +92,7 @@ def reduce_dimension(embeddings, dim, filename):
         for i, word in enumerate(X_train_names):
             final_pca_embeddings[word] = X_new_final[i]
             embedding_file.write("%s\t" % word)
-            for u in Ufit[0:7]:
+            for u in Ufit[0:D]:
                 final_pca_embeddings[word] = (
                     final_pca_embeddings[word]
                     - np.dot(u.transpose(), final_pca_embeddings[word])
@@ -103,7 +106,7 @@ def reduce_dimension(embeddings, dim, filename):
 
     return final_pca_embeddings
 
-def reduce_dimension_flat_means(embeddings, dim, filename):
+def reduce_dimension_flat_means(embeddings, dim, filename, D=0):
     """Reduce dimensionality embeddings in the `embeddings` dict to
     `dim` dimensions. Returns a new dict containing the reduced embeddings.
     Also writes the embeddings to a text file.
@@ -132,7 +135,7 @@ def reduce_dimension_flat_means(embeddings, dim, filename):
     # Remove projections on top components
     z = []
     for i, vector in enumerate(X_train):
-        for u in U1[0:7]:
+        for u in U1[0:D]:
             vector = vector - np.dot(u.transpose(), vector) * u
         z.append(vector)
     
@@ -161,7 +164,7 @@ def reduce_dimension_flat_means(embeddings, dim, filename):
         for i, word in enumerate(X_train_names):
             final_pca_embeddings[word] = X_new_final[i]
             embedding_file.write("%s\t" % word)
-            for u in Ufit[0:7]:
+            for u in Ufit[0:D]:
                 final_pca_embeddings[word] = (
                     final_pca_embeddings[word]
                     - np.dot(u.transpose(), final_pca_embeddings[word])

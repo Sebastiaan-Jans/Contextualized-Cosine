@@ -32,6 +32,41 @@ def load_full_glove(embeddings_path):
     return gModel
 
 
+def reduce_dimension_PCA(embeddings, dim, filename):
+    """Reduce dimensionality embeddings in the `embeddings` dict to
+    `dim` dimensions. Returns a new dict containing the reduced embeddings.
+    Also writes the embeddings to a text file.
+    Uses standard PCA.
+    """
+    X_train = []
+    X_train_names = []
+    for word, vector in embeddings.items():
+        X_train_names.append(word)
+        X_train.append(vector)
+    
+    X_train = np.asarray(X_train)
+    
+
+    # PCA for dimensionality reduction
+    pca = PCA(n_components=dim)
+    X_new = pca.fit_transform(X_train)
+
+    pca_embeddings = {}
+
+    # Fill dict and write to file.
+    with open(filename, 'w', encoding='utf-8') as embedding_file:
+        for i, word in enumerate(X_train_names):
+            pca_embeddings[word] = X_new[i]
+            embedding_file.write("%s\t" % word)
+
+            # loop over all values and write to the file
+            for value in pca_embeddings[word]:
+                embedding_file.write("%f\t" % value)
+            
+            embedding_file.write("\n")
+
+    return pca_embeddings
+
 
 def reduce_dimension(embeddings, dim, filename, D=0):
     """Reduce dimensionality embeddings in the `embeddings` dict to

@@ -7,20 +7,34 @@ def load_matrix(path):
 
     return matrix
 
-dimensions = [10, 15, 24, 25, 50, 100]
+dimensions = [10, 15, 24, 50, 100]
+cats = ["Birds","Clothing","Fruit","Furniture","Professions","Sports","Vehicles","Vegetables"]
+
+eigenvalues = {}
 
 for dims in dimensions:
-    path = './results/' + str(dims) + 'dims/'
-    filename = 'inv_cov_' + str(dims) + '_dimensions.txt'
-    eigen_values, eigen_vectors = np.linalg.eig(load_matrix(path + filename))
+    for cat in cats:
+        path = './results/' + str(dims) + 'dims/'
+        filename = 'inv_cov_' + cat + '_' + str(dims) + '_dimensions.txt'
+        eigen_values, eigen_vectors = np.linalg.eig(load_matrix(path + filename))
 
-    file = open(path + 'eigen_values' + str(dims) + '_dimensions.txt', 'w')
-    np.savetxt(file, eigen_values)
-    file.close()
+        eigenvalues[cat] = [max(eigen_values), min(eigen_values),sum(eigen_values)/dims]
 
-    file2 = open(path + 'eigen_vectors' + str(dims) + '_dimensions.txt', 'w')
-    np.savetxt(file2, eigen_vectors)
-    file2.close()
+        file = open(path + 'eigen_values_' + cat + '_' + str(dims) + '_dimensions.txt', 'w')
+        np.savetxt(file, eigen_values)
+        file.close()
 
-print('Eigen values: ', eigen_values)
-print('Eigen vectors: ', eigen_vectors[:,0])
+        file2 = open(path + 'eigen_vectors_' + cat + '_' + str(dims) + '_dimensions.txt', 'w')
+        np.savetxt(file2, eigen_vectors)
+        file2.close()
+
+        file3 = open(path + 'eigen_values_max_min_avg_' + cat + '_' + str(dims) + '_dimension.txt', 'w')
+        np.savetxt(file3, eigenvalues[cat])
+        file3.close()
+
+    #print('Eigen values: ', eigen_values)
+    #print('Eigen vectors: ', eigen_vectors[:,0])
+
+        print(dims, cat, eigenvalues[cat])
+
+

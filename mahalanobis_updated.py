@@ -7,6 +7,7 @@ from scipy.spatial import distance
 import scipy as sp
 from matplotlib import pyplot as plt
 import scipy.stats
+from dim_red import reduce_dimension_PCA, load_full_glove, reduce_dimension
 
 
 def reduced_glove_reps(words, path):
@@ -77,7 +78,7 @@ def get_words():
 
 
 
-def compute_mahala_and_baseline(cat, representations, human_judgements):
+def compute_mahala_and_baseline(cat, representations, human_judgements, inv_cov):
     '''
     Function that for each word pair computes the cosine similarity extended with
     the Mahalanobis metric and computes regular cosine similarity.
@@ -88,14 +89,19 @@ def compute_mahala_and_baseline(cat, representations, human_judgements):
     b_sims = [] #similarity between words based on the baseline, cosine similarity
     h_sims = [] #similarity between words based on human judgements
 
-    cov = np.cov(get_cat_matrix(representations, cat))
-    det = np.linalg.det(cov)
+    cov_cat = np.cov(get_cat_matrix(representations, cat))
+    det_cat = np.linalg.det(cov_cat)
 
     #check whether determinant of the matrix is 0 or not
-    if det == 0:
-        inv_cov = np.linalg.pinv(cov)
-    elif det != 0:
-        inv_cov = sp.linalg.inv(cov)
+    if det_cat == 0:
+        inv_cov_cat = np.linalg.pinv(cov_cat)
+    elif det_cat != 0:
+        inv_cov_cat = sp.linalg.inv(cov_cat)
+
+    # save inv_cov_cat
+    f = open(path + 'inv_cov_' + cat + '_' + str(dims) + '_dimensions.txt', 'w')
+    np.savetxt(f, inv_cov_cat)
+    f.close()
 
     #get the wordpair
     for wordpair in human_judgements[cat]:
@@ -128,7 +134,7 @@ def compute_mahala_and_baseline(cat, representations, human_judgements):
 
 def get_cat_matrix(representations, cat):
     '''
-    Function that retrieves the glove embeddings and returns these
+    Function that retrieves the glove embeddings per category and returns these
     in a matrix that is transposed.
     '''
     matrix = []
@@ -139,7 +145,22 @@ def get_cat_matrix(representations, cat):
     return np.array(matrix).T
 
 
-def run_all_categories(filename):
+def get_matrix(representations, words):
+    '''
+    Function that retrieves the glove embeddings of the entire data set and
+    returns these in a matrix that is transposed.
+    '''
+    matrix = []
+
+    for cat in words:
+        for (_, v) in representations[cat]:
+            matrix.append(v.numpy())
+
+    return np.array(matrix).T
+
+
+
+def run_all_categories(filename, dims, path):
     '''
     Function that retrieves the words, glove representations and human
     judgements. Calls compute_mahalanobis to compute the Mahalanobis
@@ -155,9 +176,25 @@ def run_all_categories(filename):
     baseline_sims = defaultdict(list)
     human_sims = defaultdict(list)
 
+    #compute inv_cov
+    cov = np.cov(get_matrix(representations, words))
+    det = np.linalg.det(cov)
+
+    # check whether determinant of the matrix is 0 or not
+    if det == 0:
+        inv_cov = np.linalg.pinv(cov)
+    elif det != 0:
+        print('det is not 0')
+        inv_cov = sp.linalg.inv(cov)
+
+    #save inv_cov
+    f = open(path + 'inv_cov_' + str(dims) + '_dimensions.txt', 'w')
+    np.savetxt(f, inv_cov)
+    f.close()
+
     for cat in words:
         # get word similarity based on (1) mahalanobis distance and (2) human judgements represented as vectors
-        mahala, baseline, human = compute_mahala_and_baseline(cat, representations, human_judgements)
+        mahala, baseline, human = compute_mahala_and_baseline(cat, representations, human_judgements, inv_cov)
         mahalanobis_sims[cat] = mahala
         baseline_sims[cat] = baseline
         human_sims[cat] = human
@@ -166,6 +203,12 @@ def run_all_categories(filename):
 
 
 def compute_correlations(mahalanobis_sims, baseline_sims, human_sims, words, dims, path):
+    '''
+    Function that computes the correlations between (1) the mahalanobis-cosine similarities
+    and the human judgements and (2) the cosine similarities and the human judgements. It
+    computes correlations both per category and for the entire data set and saves the
+    correlation results in a file.
+    '''
 
     all_mahala = []
     all_baseline = []
@@ -219,6 +262,20 @@ def plot_results(mahalanobis_sims, human_sims, words, dims, path):
     plt.close()
 
 
+def plot_one_cat(mahalanobis_sims, human_sims, cat, dims, path):
+    '''
+    Function that plots the results of comparing the Mahalanobis
+    distances between word pairs with the human judgements.
+    '''
+    plt.scatter(mahalanobis_sims[cat], human_sims[cat], s=5)
+
+    #plt.legend(words.keys(), markerscale=2.)
+    plt.xlabel('Cosine similarity extended with Mahalanobis metric')
+    plt.ylabel('Human judgement similarity')
+    plt.savefig(path + 'Scatter_' + str(dims) + 'dims_mahalanobis_' + cat)
+    plt.close()
+
+
 def plot_baseline_results(baseline_sims, human_sims, words, dims, path):
     '''
     Function that plots the results of comparing the cosine similarities
@@ -234,16 +291,24 @@ def plot_baseline_results(baseline_sims, human_sims, words, dims, path):
     plt.close()
 
 
-dims = 25
-glove_reps = 'glove_dim' + str(dims) + '.txt'
-#path to where the results should be stored
-path = './results/'
+dims = 100
 
-words, mahalanobis_distances, baseline_similarities, human_judgements = run_all_categories(glove_reps)
-print(mahalanobis_distances)
-print(human_judgements)
+glove_embeds = load_full_glove('glove.6B.200d.txt')
+reduce_dimension(glove_embeds, dims, 'glove_dim' + str(dims) + '.txt')
+
+#reduce_dimension_PCA(glove_embeds, dims, 'glove_dim' + str(dims) + '.txt')
+reduce_dimension(glove_embeds, dims, 'glove_dim' + str(dims) + '.txt')
+
+glove_reps = 'glove_dim' + str(dims) + '.txt'
+path = './results/' + str(dims) + 'dims/'
+
+words, mahalanobis_distances, baseline_similarities, human_judgements = run_all_categories(glove_reps, dims, path)
 
 compute_correlations(mahalanobis_distances, baseline_similarities, human_judgements, words, dims, path)
 
 plot_results(mahalanobis_distances, human_judgements, words, dims, path)
 plot_baseline_results(baseline_similarities, human_judgements, words, dims, path)
+
+for cat in words:
+    plot_one_cat(mahalanobis_distances, human_judgements, cat, dims, path)
+

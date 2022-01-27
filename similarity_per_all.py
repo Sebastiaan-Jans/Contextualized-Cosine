@@ -950,7 +950,7 @@ def find_best_params():
 
 def hyperp_glove():
     model_name = "GLOVE"
-    reduction_option = [50] #[15, 24,50]
+    reduction_option = [24] #[15, 24,50]
     ### Since it takes forever, 2 hours for one condition on the 15 dim, and it will only get worse time wise, I will not experiment with num_folds and learning_rate.
     ### Besides, they look pretty random and it does not look like it is the best idea to customize per category. So, I am just going to use the forst ones. 
     for num_folds in [5]:#[5, 6, 7]:

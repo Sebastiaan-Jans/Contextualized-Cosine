@@ -33,6 +33,8 @@ from torch.utils.data.sampler import SubsetRandomSampler
 from transformers import BertModel, BertForMaskedLM, BertTokenizer
 from transformers import GPT2LMHeadModel, GPT2Tokenizer
 import gensim
+
+
 class similarity_bi(torch.utils.data.Dataset):
 
     def __init__(self, cat):
@@ -59,9 +61,8 @@ class similarity_bi(torch.utils.data.Dataset):
         self.y = torch.cat((self.y, new.y), 0)
         return self
 
-
 # ## Create the datasets by splitting the given data up into k folds of data and defining the train and test sets
-def create_dataset(cat):
+def create_dataset(cat, num_folds):
     ## Bilinear
 
     # get dataset
@@ -132,7 +133,7 @@ class Symmetric_BilinearNN(torch.nn.Module):
 
 
 # ## Initialise the model
-def model_setup(dataset):
+def model_setup(dataset, learning_rate):
     ##Bilinear
 
     # setting up the model
@@ -153,7 +154,7 @@ def model_setup(dataset):
 
     # instantiate the model
     model_bi = Symmetric_BilinearNN(n_features, n_classes)
-    # model = model.to('cuda') #if you have it
+    #model_bi = model_bi.to('cuda') #if you have it
 
     # set up the loss and the optimizer
     criterion = torch.nn.MSELoss(reduction="mean")
@@ -250,10 +251,10 @@ def run_epochs(model_bi, criterion, optimizer, n_epochs, train_loader, val_loade
 
 
 # ## Split the data up into k folds and train k models on that data
-def train_k(cat, modelName, n_epochs, pearson_model, spearman_model, path):
+def train_k(cat, modelName, n_epochs, pearson_model, spearman_model, path, num_folds, learning_rate):
     # Print current category and setup necessary variables
     print("Current category is " + cat)
-    dataset, train_loader, test_loader = create_dataset(cat)
+    dataset, train_loader, test_loader = create_dataset(cat, num_folds)
     tot_cor_p = []
     tot_cor_s = []
 
@@ -266,7 +267,7 @@ def train_k(cat, modelName, n_epochs, pearson_model, spearman_model, path):
         model_bool = True
         while model_bool is True:
             start = time.time()
-            model_bi, criterion, optimizer = model_setup(dataset)
+            model_bi, criterion, optimizer = model_setup(dataset, learning_rate)
             model_bi, total_train_losses, model_bool, total_val_losses, epoch_cutoff, lowest_loss_fold = run_epochs(model_bi, criterion, optimizer, n_epochs, train_loader[i], test_loader[i])
         end = time.time()
         dur = end - start
@@ -381,8 +382,9 @@ def get_baseline_correlations(test_loader, cat_name, pearson_data, spearman_data
 
 # ## General Word Embedding Functions
 #print word pair similarities for each category
-cos = nn.CosineSimilarity(dim=0, eps=1e-6)
+
 def cosineSim(words):
+    cos = nn.CosineSimilarity(dim=0, eps=1e-6)
     for category in words:
         cat_unique = words[category].dropna().unique()
         dim = len(cat_unique)
@@ -401,6 +403,7 @@ def cosineSim(words):
 
 #function that compares embedding model and human of two nouns of a category
 def compare(category, n1, n2, ctxt=False):
+    cos = nn.CosineSimilarity(dim=0, eps=1e-6)
     if ctxt:
         repr = representations_ctxt
     else:
@@ -443,18 +446,14 @@ def predictMaskedWord(sent, modelLM, tokenizer):
 
 # ## retrieve the human judgement scores and the wordsim and simlex data (only if non-contextualised embeddings are used)
 def get_words(model_name, context_on):
-    # Ensures that context_on can only be True when model is GPT-2 or BERT
-    if (model_name != "GPT-2" and model_name != "BERT") and context_on:
-        context_on = False
+    '''
+    Function for retrieving the words (organized in their corresponding categories)
+    and the human judgement scores for each possible word pair in each category.
+    '''
 
-
-    # ## Getting human-judgements for word pairs
-    words=pd.read_csv('table 1 - word lists.csv')
-
-
-    # tensor to encode human judgements
+    words = pd.read_csv('../table 1 - word lists.csv')
+    #-----------------below comment starts here
     human_judgements = defaultdict(list)
-
     # column headers are word pairs separated by \
     pattern = re.compile('\\\\')
 
@@ -462,7 +461,7 @@ def get_words(model_name, context_on):
         if category == "wordsim353":
             break
         # open every file with category name
-        filepath = category + "_pairwise.csv"
+        filepath = "../study1_pairwise_data/data_individual_level/" + category + "_pairwise.csv"
 
         # drop "unnamed 0" column
         category_judgements = pd.DataFrame.drop(pd.read_csv(filepath), "Unnamed: 0", axis=1)
@@ -481,7 +480,7 @@ def get_words(model_name, context_on):
             # send human judgements by category and indexed pair of words to tensor
             # strip spaces after splitting
             human_judgements[category].append(([x.strip() for x in nouns], avg_rep/7))
-
+    '''    # tensor to encode human judgements
     if not context_on:
         # add WordSimilarity-353 dataset to human judgement data
         category = "wordsim353"
@@ -504,18 +503,19 @@ def get_words(model_name, context_on):
 
         for i in range(1, len(judgements)):
             human_judgements[category].append(([judgements[i][0], judgements[i][1]], float(judgements[i][2])/10))
-
-    return context_on, words, human_judgements
+    '''
+    return False, words, human_judgements
 
 
 # ## retrieve the embeddings for the selected embedding type
-def get_model(model_name, context_on):
+def get_model(words, dims=200, model_name = "GLOVE", context_on=False):
     # Ensures that context_on can only be True when model is GPT-2 or BERT
     if (model_name != "GPT-2" and model_name != "BERT") and context_on:
         context_on = False
 
     if model_name == "GLOVE":
-        return glove_model()
+        print("We only use GLOVE")
+        return glove_model(words, dims)
     elif model_name == "word2vec":
         return word2vec_model()
     elif model_name == "GPT-2":
@@ -527,10 +527,12 @@ def get_model(model_name, context_on):
 
 
 # ## GloVe Code
-def glove_model():
+def glove_model(words, dims):
     #load the pretrained GloVe model (this may take some time)
     gModel = {}
-    with open("glove.6B.200d.txt", 'r', encoding='utf-8') as f:
+    
+    with open('../dim_reduces_embeddings/glove_dim' + str(dims) + '.txt', 'r', encoding='utf-8') as f:
+    #with open("glove.6B.200d.txt", 'r', encoding='utf-8') as f:
         for line in f:
             values = line.split()
             word = values[0]
@@ -542,7 +544,7 @@ def glove_model():
 
     #create list for categories, words and GloVe representations
     representations = defaultdict(list)
-
+    
     for category in words:
 
         for word in words[category].dropna().unique(): #drop NaN values
@@ -776,6 +778,7 @@ def bert_model_ctxt(bModel, tokenizer):
 
 # ## Prepare data for ML
 def prepare_data(words, representations, human_judgements, model_name, context_on):
+    cos = nn.CosineSimilarity(dim=0, eps=1e-6)
     data = defaultdict(list)
     X = defaultdict(list)
     X1 = defaultdict(list)
@@ -848,25 +851,25 @@ def save_data(path, cat, model_name, pearson_model, spearman_model, pearson_base
 
 
 # ## Create a directory to save the data in
-def make_save_dir(model_name, context_on):
+def make_save_dir(model_name, dim = 200, context_on = False):
     if context_on and (model_name == "GPT-2" or model_name == "BERT"):
         ctxt_str = "_contextualised"
     elif model_name == "GPT-2" or model_name == "BERT":
-        ctxt_str = "_non-contextualised"
+        ctxt_str = "_nc"
     else:
-        ctxt_str = ""
-    path = os.path.join(os.getcwd(), "Data_per_cat_" + model_name + ctxt_str)
+        ctxt_str = "_nc"
+    path = os.path.join(os.getcwd(), "Data_per_cat_" + model_name + "_dim" + str(dim) + ctxt_str)
     if not os.path.isdir(path):
         os.mkdir(path)
     if not os.path.isdir(path + "/imgs/"):
         os.mkdir(path + "/imgs/")
-    return path
+    return path, ctxt_str
 
 
 # ## Train and test a model on the selected category
-def run_category(cat, model_name, n_epochs, pearson_model, spearman_model, pearson_base, spearman_base, path):
-    pearson_model, spearman_model, loss, pearson, spearman = train_k(cat, model_name, n_epochs, pearson_model, spearman_model, path)
-    dataset, train_loader, test_loader = create_dataset(cat)
+def run_category(cat, model_name, n_epochs, pearson_model, spearman_model, pearson_base, spearman_base, path, num_folds,learning_rate, ctxt_str):
+    pearson_model, spearman_model, loss, pearson, spearman = train_k(cat, model_name, n_epochs, pearson_model, spearman_model, path, num_folds, learning_rate)
+    dataset, train_loader, test_loader = create_dataset(cat, num_folds)
     pearson_base, spearman_base = get_baseline_correlations(test_loader, cat, pearson_base, spearman_base)
 
     # save best lr+fold combo in dicts
@@ -879,9 +882,9 @@ def run_category(cat, model_name, n_epochs, pearson_model, spearman_model, pears
 
 
 # ## Train a separate model on each of the categories in the category list
-def run_all_categories(words, model_name, n_epochs, pearson_model, spearman_model, pearson_base, spearman_base, path):
+def run_all_categories(words, model_name, n_epochs, pearson_model, spearman_model, pearson_base, spearman_base, path, num_folds, learning_rate, ctxt_str):
     for cat in words:
-        pearson_model, spearman_model, pearson_base, spearman_base = run_category(cat, model_name, n_epochs, pearson_model, spearman_model, pearson_base, spearman_base, path)
+        pearson_model, spearman_model, pearson_base, spearman_base = run_category(cat, model_name, n_epochs, pearson_model, spearman_model, pearson_base, spearman_base, path, num_folds, learning_rate, ctxt_str)
     cat = "all_categories"
     save_data(path, cat, model_name, pearson_model, spearman_model, pearson_base, spearman_base, learning_rate, num_folds)
 
@@ -901,92 +904,91 @@ loss_dict = defaultdict(defaultdict)
 corr_p_dict = defaultdict(defaultdict)
 corr_s_dict = defaultdict(defaultdict)
 
-# Main loops for hyperparameter search
-for num_folds in [5, 6, 7]:
-    for learning_rate in [0.00001, 0.000001, 0.0000001]:
-        print("\nlr =", learning_rate, "and num_folds =", num_folds)
-        for model_name, context_on in all_models:
-            # initialise the pearson and spearman lists for each model
-            labels_model = ["category", "correlation", "p-value", "epochs", "lowest train loss", "duration"]
-            labels_base = ["category", "correlation", "p-value"]
-            pearson_model = []
-            spearman_model = []
-            pearson_model.append(labels_model)
-            spearman_model.append(labels_model)
-            pearson_base = []
-            spearman_base = []
-            pearson_base.append(labels_base)
-            spearman_base.append(labels_base)
-
-            # get the human judgements and representations and prepare the data
-            context_on, words, human_judgements = get_words(model_name, context_on)
-            representations = get_model(model_name, context_on)
-            path = make_save_dir(model_name, context_on)
-            data, X, X1, X2 = prepare_data(words, representations, human_judgements, model_name, context_on)
-
-            # print which model is currently running
-            if context_on and (model_name == "GPT-2" or model_name == "BERT"):
-                ctxt_str = "contextualised"
-            elif model_name == "GPT-2" or model_name == "BERT":
-                ctxt_str = "non-contextualised"
-            else:
-                ctxt_str = ""
-            print("\nRunning " + model_name + ' ' + ctxt_str)
-
-            # define the maximal number of epochs for training
-            max_epochs = 500
-
-            # define the category types
-            categories = ['Birds', 'Clothing', 'Fruit', 'Furniture', 'Professions', 'Sports', 'Vegetables', 'Vehicles']
-
-            # for each category in the list of categories, train a model on the words in that category
-            run_all_categories(categories, model_name, max_epochs, pearson_model, spearman_model, pearson_base, spearman_base, path)
-
-            # if embedding is non-contextualised, also train models on the wordsim and simlex datasets
-            if not context_on:
-                run_category("wordsim353", model_name, max_epochs, pearson_model, spearman_model, pearson_base, spearman_base, path)
-                run_category("simlex999", model_name, max_epochs, pearson_model, spearman_model, pearson_base, spearman_base, path)
-                cat = "all_categories"
-                save_data(path, cat, model_name, pearson_model, spearman_model, pearson_base, spearman_base, learning_rate, num_folds)
 
 
-# small function to get the key of a dict given a value
+# small function to get the key of a dict given a value 
 def get_key(val, dict):
     for key, value in dict.items():
          if val == value:
              return key
 
-labels_best = ["model name", "category", "lowest loss lr", "lowest loss folds", "highest pearson lr", "highest pearson folds", "highest spearman lr", "highest spearman folds"]
-best_params = []
-best_params.append(labels_best)
+def find_best_params():
+    labels_best = ["model name", "category", "lowest loss lr", "lowest loss folds", "highest pearson lr", "highest pearson folds", "highest spearman lr", "highest spearman folds"]
+    best_params = []
+    best_params.append(labels_best)
 
 
-# for-loop to find the best hyperparameter combination per model and category
-# Dictionaries are used to save all the different model/cat/lr/fold combinations, this for-loop loops through them
-# to find the lr+fold combo with the lowest loss and highest correlations for every model and category combination
-for key in loss_dict.keys():
-    model, cat = key.split()
-    lowest_loss = float('inf')
-    highest_corr_p = float('-inf')
-    highest_corr_s = float('-inf')
-    for value in loss_dict[key].values():
-        if value < lowest_loss:
-            lowest_loss = value
-    lr_loss, folds_loss = get_key(lowest_loss, loss_dict[key]).split()
-    for value in corr_p_dict[key].values():
-        if value > highest_corr_p:
-            highest_corr_p = value
-    lr_corr_p, folds_corr_p = get_key(highest_corr_p, corr_p_dict[key]).split()
-    for value in corr_s_dict[key].values():
-        if value > highest_corr_s:
-            highest_corr_s = value
-    lr_corr_s, folds_corr_s = get_key(highest_corr_s, corr_s_dict[key]).split()
-    best = [model] + [cat]+ [lr_loss] + [folds_loss] + [lr_corr_p] + [folds_corr_p] + [lr_corr_s] + [folds_corr_s]
-    best_params.append(best)
-print(best_params)
+    # for-loop to find the best hyperparameter combination per model and category
+    # Dictionaries are used to save all the different model/cat/lr/fold combinations, this for-loop loops through them
+    # to find the lr+fold combo with the lowest loss and highest correlations for every model and category combination
+    for key in loss_dict.keys():
+        model, cat = key.split()
+        lowest_loss = float('inf')
+        highest_corr_p = float('-inf')
+        highest_corr_s = float('-inf')
+        for value in loss_dict[key].values():
+            if value < lowest_loss:
+                lowest_loss = value
+        lr_loss, folds_loss = get_key(lowest_loss, loss_dict[key]).split()
+        for value in corr_p_dict[key].values():
+            if value > highest_corr_p:
+                highest_corr_p = value
+        lr_corr_p, folds_corr_p = get_key(highest_corr_p, corr_p_dict[key]).split()
+        for value in corr_s_dict[key].values():
+            if value > highest_corr_s:
+                highest_corr_s = value
+        lr_corr_s, folds_corr_s = get_key(highest_corr_s, corr_s_dict[key]).split()
+        best = [model] + [cat]+ [lr_loss] + [folds_loss] + [lr_corr_p] + [folds_corr_p] + [lr_corr_s] + [folds_corr_s]
+        best_params.append(best)
+    print(best_params)
 
 
-# save the best hyperparameter combinations in a csv file
-with open("hyperparameter_results_per_cat.csv", "w", newline='') as f:
-    writer = csv.writer(f)
-    writer.writerows(best_params)
+    # save the best hyperparameter combinations in a csv file
+    with open("hyperparameter_results_per_cat.csv", "w", newline='') as f:
+        writer = csv.writer(f)
+        writer.writerows(best_params)
+
+
+def hyperp_glove():
+    model_name = "GLOVE"
+    reduction_option = [50] #[15, 24,50]
+    ### Since it takes forever, 2 hours for one condition on the 15 dim, and it will only get worse time wise, I will not experiment with num_folds and learning_rate.
+    ### Besides, they look pretty random and it does not look like it is the best idea to customize per category. So, I am just going to use the forst ones. 
+    for num_folds in [5]:#[5, 6, 7]:
+        for learning_rate in [0.00001]:#[0.00001, 0.000001, 0.0000001]:
+            print("\nlr =", learning_rate, "and num_folds =", num_folds)
+            for dim in reduction_option:
+                # initialise the pearson and spearman lists for each model
+                labels_model = ["category", "correlation", "p-value", "epochs", "lowest train loss", "duration"]
+                labels_base = ["category", "correlation", "p-value"]
+                pearson_model = []
+                spearman_model = []
+                pearson_model.append(labels_model)
+                spearman_model.append(labels_model)
+                pearson_base = []
+                spearman_base = []
+                pearson_base.append(labels_base)
+                spearman_base.append(labels_base)
+
+                # get the human judgements and representations and prepare the data
+                context_on, words, human_judgements = get_words(model_name, False)
+                representations = get_model(words, dim, model_name, context_on)
+                path, ctxt_str = make_save_dir(model_name, dim = dim)
+                global data
+                global X
+                global X1
+                global X2
+                data, X, X1, X2 = prepare_data(words, representations, human_judgements, model_name, context_on)
+
+                # define the maximal number of epochs for training
+                max_epochs = 500
+
+                # define the category types
+                categories = ['Birds', 'Clothing', 'Fruit', 'Furniture', 'Professions', 'Sports', 'Vegetables', 'Vehicles']
+
+                # for each category in the list of categories, train a model on the words in that category
+                run_all_categories(categories, model_name, max_epochs, pearson_model, spearman_model, pearson_base, spearman_base, path, num_folds, learning_rate, ctxt_str)
+
+
+hyperp_glove()
+find_best_params()

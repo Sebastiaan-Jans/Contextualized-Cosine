@@ -247,15 +247,42 @@ def plot_results_to_baseline(mahalanobis_sims, human_sims, words, path):
     plt.savefig("Baseline_minus_Mahalanobis")
     plt.show()
 
+
+def cosine_sim_cat_matrices(words,path, to_plot = False):
+    '''Get the cosine similarity per category to use it as a baseline.'''
+
+    cos = torch.nn.CosineSimilarity(dim=0, eps=1e-6)
+    representations = reduced_glove_reps(words, path)
+    
+    all_adjecensy = {}
+    for category in words:
+        cat_unique = words[category].dropna().unique()
+        dim = len(cat_unique)
+        adj_matrix = np.zeros((dim, dim))
+        for ind1, val1 in enumerate(enumerate(cat_unique)):
+            for ind2, val2 in enumerate(enumerate(cat_unique)):
+                adj_matrix[ind1, ind2] = cos(representations[category][ind1][1], representations[category][ind2][1])
+        all_adjecensy[category] = adj_matrix
+
+        if(to_plot == True):
+            print(category)
+            ax = sns.heatmap(adj_matrix, linewidth=0.5, vmin=0, vmax=1)
+            plt.xticks(range(dim), words[category].dropna().unique(),rotation=-45)
+            plt.yticks(range(dim), words[category].dropna().unique(),rotation=45)
+            plt.show()
+
+    return all_adjecensy
+
 path = '../glove50-to-25.txt'
 words, mahalanobis_distances, human_judgements = run_all_categories(path)#('../glove_dim25.txt')
 #print(mahalanobis_distances)
 #print(human_judgements)
 #cosine_sim_cat(words, path)
 
-cos_sim_mah = compute_cos_sim(mahalanobis_distances, human_judgements, words)
-print(cos_sim_mah)
+#cos_sim_mah = compute_cos_sim(mahalanobis_distances, human_judgements, words)
+#print(cos_sim_mah)
 
 #plot_results(mahalanobis_distances, human_judgements, words)
-plot_results_to_baseline(mahalanobis_distances, human_judgements, words, path)
+#plot_results_to_baseline(mahalanobis_distances, human_judgements, words, path)
+cosine_sim_cat_matrices(words,path, to_plot = False)
 

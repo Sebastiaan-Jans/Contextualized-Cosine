@@ -249,6 +249,9 @@ def run_epochs(model_bi, criterion, optimizer, n_epochs, train_loader, val_loade
 
     return model_bi, total_train_losses, bad_model, total_val_losses, i+1, epoch_train_loss
 
+def save_model_bi_matrix(model_bi,cat, curr_fold, path, lr = -4, fold = 5, model_name = "GLOVE"):
+    '''Given a bilinear model, with finsihed traning save the vale matrix'''
+    np.save(os.path.join(path, "weigths" + model_name + "_" + cat + "_" + str(lr) + "_" + str(fold) + "_current" + str(curr_fold) + ".csv"), model_bi.fc1)
 
 # ## Split the data up into k folds and train k models on that data
 def train_k(cat, modelName, n_epochs, pearson_model, spearman_model, path, num_folds, learning_rate):
@@ -269,6 +272,7 @@ def train_k(cat, modelName, n_epochs, pearson_model, spearman_model, path, num_f
             start = time.time()
             model_bi, criterion, optimizer = model_setup(dataset, learning_rate)
             model_bi, total_train_losses, model_bool, total_val_losses, epoch_cutoff, lowest_loss_fold = run_epochs(model_bi, criterion, optimizer, n_epochs, train_loader[i], test_loader[i])
+        save_model_bi_matrix(model_bi, cat, i, path)
         end = time.time()
         dur = end - start
         pearson_model, spearman_model, pearson, spearman = get_new_correlations(model_bi, test_loader[i], cat, pearson_model, spearman_model, epoch_cutoff, lowest_loss_fold, dur)

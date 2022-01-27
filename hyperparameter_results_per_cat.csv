@@ -1,9 +1,2 @@
 model name,category,lowest loss lr,lowest loss folds,highest pearson lr,highest pearson folds,highest spearman lr,highest spearman folds
-GLOVE-_nc,Birds,1e-05,5,1e-05,5,1e-05,5
-GLOVE-_nc,Clothing,1e-05,5,1e-05,5,1e-05,5
-GLOVE-_nc,Fruit,1e-05,5,1e-05,5,1e-05,5
-GLOVE-_nc,Furniture,1e-05,5,1e-05,5,1e-05,5
-GLOVE-_nc,Professions,1e-05,5,1e-05,5,1e-05,5
-GLOVE-_nc,Sports,1e-05,5,1e-05,5,1e-05,5
-GLOVE-_nc,Vegetables,1e-05,5,1e-05,5,1e-05,5
-GLOVE-_nc,Vehicles,1e-05,5,1e-05,5,1e-05,5
+GLOVE-_nc,All,1e-05,5,1e-05,5,1e-05,5
